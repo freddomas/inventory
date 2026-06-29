@@ -1,0 +1,17 @@
+.agents/
+.codex/
+.env
+.env.*
+!.env.example
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+data/*.json
+data/*.bak
+data/*.tmp
+reports/
+coverage/
+.DS_Store
+Thumbs.db
