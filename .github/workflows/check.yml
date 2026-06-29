@@ -22,5 +22,8 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Validate
-        run: npm run check
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify
+        run: npm run verify

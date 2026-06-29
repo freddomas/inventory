@@ -2,9 +2,20 @@
 
 Application web multi-shop de gestion des stocks, ventes, validations et clotures.
 
+## Structure
+
+```text
+public/              Interface web servie au navigateur
+src/server/          Backend Express, API et persistance JSON
+scripts/smoke.mjs    Smoke test HTTP autonome
+test/                Tests API et controles de roles
+docs/QUALITY_LOOP.md Critere de sortie de boucle qualite
+```
+
 ## Demarrage local
 
 ```bash
+npm ci
 npm start
 ```
 
@@ -33,20 +44,30 @@ Variables de production recommandees:
 
 ```bash
 NODE_ENV=production
+BUSINESS_TIME_ZONE=Africa/Kinshasa
 HOST=0.0.0.0
 PORT=<fourni-par-la-plateforme>
 DATA_DIR=<chemin-persistant>
+ALLOW_DEMO_SEED=true
+RESET_CORRUPT_STORE=false
 ```
 
 Le endpoint `/api/health` permet aux plateformes d'hebergement de verifier que le serveur repond.
 
 Sur Render, le Blueprint utilise un disque persistant monte sur `/var/data`. C'est necessaire pour ne pas perdre `store.json` a chaque redeploiement/redemarrage. Un deploiement sans disque persistant n'est pas correct pour cette application.
 
+`ALLOW_DEMO_SEED=true` est volontaire ici parce que l'application contient des donnees de demonstration. Pour une production reelle, il faut initialiser explicitement les donnees et retirer ce mode demo.
+
 ## Validation
 
 ```bash
-npm run check
+npx playwright install chromium
+npm run verify
 ```
+
+`npm run verify` execute le controle syntaxique, les tests API, le smoke test HTTP et les tests UI Playwright avec un `DATA_DIR` temporaire.
+
+Pour le CI, `npm run ci` est un alias explicite vers cette verification complete.
 
 ## Donnees locales
 

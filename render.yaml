@@ -13,8 +13,18 @@ services:
         value: production
       - key: HOST
         value: 0.0.0.0
+      - key: BUSINESS_TIME_ZONE
+        value: Africa/Kinshasa
       - key: DATA_DIR
         value: /var/data
+      - key: ALLOW_DEMO_SEED
+        value: true
+      - key: RESET_CORRUPT_STORE
+        value: false
+      - key: SESSION_MAX_AGE_MS
+        value: 28800000
+      - key: MAX_LOGS
+        value: 1000
     disk:
       name: inventory-data
       mountPath: /var/data

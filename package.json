@@ -6,9 +6,21 @@
   "description": "Inventory Realm multi-shop inventory and sales app.",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check app.js && node --check server.mjs"
+    "check": "node --check server.mjs && node --check src/server/index.mjs && node --check public/app.js && node --check public/date-utils.mjs && node --check scripts/smoke.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:ui": "playwright test",
+    "smoke": "node scripts/smoke.mjs",
+    "ci": "npm run verify",
+    "verify": "npm run check && npm test && npm run smoke && npm run test:ui"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "helmet": "^8.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
   }
 }

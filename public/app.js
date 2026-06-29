@@ -1,9 +1,11 @@
+import { addLocalDays, dateFromLocalDate, localWeekdayIndex, todayLocal, weekDaysLocal } from "./date-utils.mjs";
+
 (function () {
   "use strict";
 
   const app = document.getElementById("app");
   const moneyFmt = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "USD" });
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
 
   const state = {
     data: null,
@@ -264,7 +266,7 @@
     const previousStats = periodStats(state.data.sales, previousWeekStart, previousWeekEnd);
     const todayStats = periodStats(state.data.sales, today, today);
     const pendingSales = state.data.sales.filter((sale) => sale.status === "pending_admin_approval").length;
-    const pendingStock = state.data.stockEntries.filter((entry) => entry.status === "pending_responsable_validation").length;
+    const pendingStock = (state.data.stockEntries || []).filter((entry) => entry.status === "pending_responsable_validation").length;
     const activeAlerts = state.data.alerts.filter((alert) => ["active", "acknowledged"].includes(alert.status));
     const completedSales = state.data.sales.filter((sale) => sale.status === "completed").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const salesTarget = roleCanView("sales") ? "sales" : "closures";
@@ -401,13 +403,13 @@
     return results.slice(0, 8).map((variant) => {
       const price = priceFor(variant);
       const type = typeById(variant.typeId);
-      return `<button class="product-result" data-action="addCart" data-id="${variant.id}"><span><strong>${escape(variant.name)}</strong><small>${escape(type?.name || "")} · ${variant.sku} · stock ${variant.stock}</small></span><b>${money(price.applicablePrice)}</b></button>`;
+      return `<button class="product-result" data-action="addCart" data-id="${escapeAttr(variant.id)}"><span><strong>${escape(variant.name)}</strong><small>${escape(type?.name || "")} · ${escape(variant.sku)} · stock ${variant.stock}</small></span><b>${money(price.applicablePrice)}</b></button>`;
     }).join("") || `<div class="empty-state">Aucun article trouvé.</div>`;
   }
 
   function renderCart() {
     if (!state.cart.length) return `<div class="cart-empty">Aucun article dans le panier.</div>`;
-    return `<div class="cart-list">${state.cart.map((item, index) => { const variant = variantById(item.variantId); const price = priceFor(variant); const delta = cartItemDelta(item, variant); return `<div class="cart-row" data-index="${index}"><div class="cart-item-main"><strong>${escape(variant.name)}</strong><small>Prix appliqué ${money(price.applicablePrice)}</small></div><label><span>Qté</span><input data-cart="${index}" data-field="quantity" type="number" min="1" max="${variant.stock}" value="${item.quantity}" /></label><label><span>Prix</span><input data-cart="${index}" data-field="soldPrice" type="number" min="0" step="0.01" value="${item.soldPrice}" /></label>${renderDelta(delta)}<button class="small-btn" type="button" data-action="removeCart" data-index="${index}">Retirer</button></div>`; }).join("")}</div>`;
+    return `<div class="cart-list">${state.cart.map((item, index) => { const variant = variantById(item.variantId); const price = priceFor(variant); const delta = cartItemDelta(item, variant); return `<div class="cart-row" data-index="${index}"><div class="cart-item-main"><strong>${escape(variant.name)}</strong><small>Prix appliqué ${money(price.applicablePrice)}</small></div><label><span>Qté</span><input data-cart="${index}" data-field="quantity" type="number" min="1" max="${variant.stock}" value="${escapeAttr(item.quantity)}" /></label><label><span>Prix</span><input data-cart="${index}" data-field="soldPrice" type="number" min="0" step="0.01" value="${escapeAttr(item.soldPrice)}" /></label>${renderDelta(delta)}<button class="small-btn" type="button" data-action="removeCart" data-index="${index}">Retirer</button></div>`; }).join("")}</div>`;
   }
 
   function renderCartSummary(totals) {
@@ -430,6 +432,15 @@
   function renderSaleDetail() {
     const sale = state.data.sales.find((item) => item.id === state.selectedSaleId) || state.data.sales[0];
     if (!sale) return `<h3>Détail vente</h3><div class="empty-state">Sélectionner une vente.</div>`;
+    return saleDetailMarkup(sale);
+  }
+
+  function renderSelectedSaleDetail() {
+    const sale = state.data.sales.find((item) => item.id === state.selectedSaleId);
+    return sale ? `<div class="panel panel-pad sale-detail-panel">${saleDetailMarkup(sale)}</div>` : "";
+  }
+
+  function saleDetailMarkup(sale) {
     const totals = totalsForSale(sale);
     return `<h3>Détail vente</h3><div class="compact-list"><div class="list-row"><strong>Statut</strong>${badge(sale.status)}</div><div class="list-row"><strong>Date</strong><span>${formatDate(sale.createdAt)}</span></div><div class="list-row"><strong>Total vendu</strong><span class="money">${money(totals.sold)}</span></div></div><div class="sale-lines">${sale.lines.map((line) => { const variant = variantById(line.variantId); return `<div class="list-row"><div><strong>${escape(variant?.name || line.variantId)}</strong><small>${line.quantity} x ${money(line.soldPrice)}</small></div><span>${signedMoney((line.soldPrice - line.applicablePrice) * line.quantity)}</span></div>`; }).join("")}</div>`;
   }
@@ -445,7 +456,7 @@
   }
 
   function renderStockForm() {
-    return `<form id="stockForm" class="grid cols-3"><div class="field"><label>Variante</label><select name="variantId">${state.data.variants.map((variant) => `<option value="${variant.id}">${escape(variant.name)} · ${variant.sku}</option>`).join("")}</select></div><div class="field"><label>Quantité</label><input name="quantity" type="number" min="1" value="1" /></div><div class="field"><label>Commentaire</label><input name="comment" /></div><button class="primary" type="submit">Déclarer l'entrée</button></form>`;
+    return `<form id="stockForm" class="grid cols-3"><div class="field"><label>Variante</label><select name="variantId">${state.data.variants.map((variant) => `<option value="${escapeAttr(variant.id)}">${escape(variant.name)} · ${escape(variant.sku)}</option>`).join("")}</select></div><div class="field"><label>Quantité</label><input name="quantity" type="number" min="1" value="1" /></div><div class="field"><label>Commentaire</label><input name="comment" /></div><button class="primary" type="submit">Déclarer l'entrée</button></form>`;
   }
 
   function renderStockTree() {
@@ -565,10 +576,10 @@
   }
 
   function renderValidations() {
-    const stock = state.data.stockEntries.filter((entry) => entry.status === "pending_responsable_validation");
+    const stock = (state.data.stockEntries || []).filter((entry) => entry.status === "pending_responsable_validation");
     const sales = state.data.sales.filter((sale) => sale.status === "pending_admin_approval");
     const canDecide = state.data.me.role === "shop_admin";
-    return `<section class="section"><div class="section-head"><div><h3>${canDecide ? "Validations" : "Backlog"}</h3><p>${canDecide ? "Décisions du responsable shop." : "Consultation des éléments en attente."}</p></div></div><div class="grid cols-2"><div class="panel panel-pad"><h3>Entrées stock</h3>${stock.length ? stock.map((entry) => validationEntry(entry, canDecide)).join("") : `<div class="empty-state">Aucune entrée en attente.</div>`}</div><div class="panel panel-pad"><h3>Ventes sous prix</h3>${sales.length ? renderSalesTable(sales) : `<div class="empty-state">Aucune vente en attente.</div>`}</div></div>${renderEntryDetail()}</section>`;
+    return `<section class="section"><div class="section-head"><div><h3>${canDecide ? "Validations" : "Backlog"}</h3><p>${canDecide ? "Décisions du responsable shop." : "Consultation des éléments en attente."}</p></div></div><div class="grid cols-2"><div class="panel panel-pad"><h3>Entrées stock</h3>${stock.length ? stock.map((entry) => validationEntry(entry, canDecide)).join("") : `<div class="empty-state">Aucune entrée en attente.</div>`}</div><div class="panel panel-pad"><h3>Ventes sous prix</h3>${sales.length ? renderSalesTable(sales) : `<div class="empty-state">Aucune vente en attente.</div>`}</div></div>${renderEntryDetail()}${renderSelectedSaleDetail()}</section>`;
   }
 
   function validationEntry(entry, canDecide) {
@@ -577,7 +588,7 @@
   }
 
   function renderEntryDetail() {
-    const entry = state.data.stockEntries.find((item) => item.id === state.selectedEntryId);
+    const entry = (state.data.stockEntries || []).find((item) => item.id === state.selectedEntryId);
     if (!entry) return "";
     const variant = variantById(entry.variantId);
     const type = variant ? typeById(variant.typeId) : null;
@@ -598,10 +609,10 @@
 
   function renderPlanning() {
     const week = weekDays(state.planningDate);
-    const users = state.data.users.filter((user) => user.role !== "shop_admin");
+    const users = (state.data.users || []).filter((user) => user.role !== "shop_admin");
     const slots = state.data.shiftSlots || [];
     const canConfigure = state.data.me.role === "shop_admin";
-    return `<section class="section"><div class="section-head"><div><h3>Planning</h3><p>Créer les plages, puis glisser les utilisateurs dans l'agenda.</p></div><div class="actions"><input id="planningDate" type="date" value="${state.planningDate}" /><button class="secondary" data-action="planningMode">${state.planningMode === "week" ? "Vue jour" : "Vue semaine"}</button></div></div><div class="planning-layout"><div class="planning-side"><div class="panel panel-pad"><h3>Équipe</h3><div class="drag-users">${users.map((user) => renderDragUser(user, canConfigure)).join("")}</div></div><div class="panel panel-pad"><h3>Plages horaires</h3>${canConfigure ? renderShiftSlotForm() : ""}${renderShiftSlotList(slots)}</div></div><div class="panel panel-pad planning-grid">${renderPlanningGrid(week)}</div></div></section>`;
+    return `<section class="section"><div class="section-head"><div><h3>Planning</h3><p>Créer les plages, puis glisser les utilisateurs dans l'agenda.</p></div><div class="actions"><input id="planningDate" type="date" value="${state.planningDate}" /><button class="secondary" data-action="planningMode">${state.planningMode === "week" ? "Vue jour" : "Vue semaine"}</button></div></div><div class="planning-layout"><div class="planning-side"><div class="panel panel-pad"><h3>Équipe</h3><div class="drag-users">${users.map((user) => renderDragUser(user, canConfigure)).join("")}</div></div><div class="panel panel-pad"><h3>Plages horaires</h3>${canConfigure ? renderShiftSlotForm() : ""}${renderShiftSlotList(slots)}</div>${canConfigure ? renderPlanningAssignForm(users, slots, week) : ""}</div><div class="panel panel-pad planning-grid">${renderPlanningGrid(week)}</div></div></section>`;
   }
 
   function renderDragUser(user, draggable) {
@@ -617,11 +628,17 @@
     return `<div class="shift-slot-list">${slots.map((slot) => `<div class="shift-slot-row"><strong>${escape(slot.name)}</strong><span>${escape(slot.start)} → ${escape(slot.end)}</span></div>`).join("")}</div>`;
   }
 
+  function renderPlanningAssignForm(users, slots, days) {
+    if (!users.length || !slots.length) return "";
+    const visibleDays = state.planningMode === "day" ? days.filter((day) => day === state.planningDate) : days;
+    return `<form id="planningAssignForm" class="panel panel-pad form-stack"><h3>Assigner</h3><div class="field"><label>Utilisateur</label><select name="userId">${users.map((user) => `<option value="${escapeAttr(user.id)}">${escape(user.name)} · ${labels[user.role]}</option>`).join("")}</select></div><div class="field"><label>Date</label><select name="date">${visibleDays.map((day) => `<option value="${escapeAttr(day)}">${escape(day)}</option>`).join("")}</select></div><div class="field"><label>Plage</label><select name="slotId">${slots.map((slot) => `<option value="${escapeAttr(slot.id)}">${escape(slot.name)} · ${escape(slot.start)}-${escape(slot.end)}</option>`).join("")}</select></div><button class="secondary" type="submit">Assigner</button></form>`;
+  }
+
   function renderPlanningGrid(days) {
     const visibleDays = state.planningMode === "day" ? days.filter((day) => day === state.planningDate) : days;
     const slots = state.data.shiftSlots || [];
     if (!slots.length) return `<div class="empty-state">Créer au moins une plage horaire avant de planifier.</div>`;
-    return `<div class="schedule">${visibleDays.map((day) => `<div class="schedule-day"><h4>${day}</h4>${slots.map((slot) => { const shifts = state.data.planning.filter((item) => item.date === day && (item.slotId === slot.id || item.slot === slot.name)); return `<div class="drop-slot" data-date="${day}" data-slot-id="${slot.id}"><header><strong>${escape(slot.name)}</strong><small>${escape(slot.start)}-${escape(slot.end)}</small></header><div class="scheduled-users">${shifts.map(renderPlannedShift).join("") || `<small>Disponible</small>`}</div></div>`; }).join("")}</div>`).join("")}</div>`;
+    return `<div class="schedule">${visibleDays.map((day) => `<div class="schedule-day"><h4>${day}</h4>${slots.map((slot) => { const shifts = (state.data.planning || []).filter((item) => item.date === day && (item.slotId === slot.id || item.slot === slot.name)); return `<div class="drop-slot" data-date="${day}" data-slot-id="${slot.id}"><header><strong>${escape(slot.name)}</strong><small>${escape(slot.start)}-${escape(slot.end)}</small></header><div class="scheduled-users">${shifts.map(renderPlannedShift).join("") || `<small>Disponible</small>`}</div></div>`; }).join("")}</div>`).join("")}</div>`;
   }
 
   function renderPlannedShift(shift) {
@@ -634,7 +651,7 @@
     const selectedSales = state.data.sales.filter((sale) => sale.createdAt.slice(0, 10) === state.closureDate && sale.status === "completed");
     const summary = periodStats(selectedSales, state.closureDate, state.closureDate);
     const canClose = ["agent", "shop_admin"].includes(state.data.me.role);
-    return `<section class="section"><div class="section-head"><div><h3>${state.data.me.role === "agent" ? "Clôturer" : "Clôtures et rapports"}</h3><p>Résumé des ventes par date.</p></div></div><div class="split"><form id="closureForm" class="panel panel-pad form-stack"><div class="actions"><button type="button" class="secondary" data-action="closureToday">Aujourd'hui</button></div><div class="field"><label>Date</label><input name="date" type="date" max="${today}" value="${state.closureDate}" /></div><div class="grid cols-3">${kpi("Ventes", summary.sales, "conclues", "accent")}${kpi("Articles", summary.items, "unités", "blue")}${kpi("Total", money(summary.revenue), "encaissé", "accent")}</div><div class="field"><label>Commentaire</label><textarea name="comment"></textarea></div>${canClose ? `<button class="primary">Clôturer la date</button>` : ""}</form><div class="panel panel-pad"><h3>Historique</h3>${state.data.closures.length ? state.data.closures.map((closure) => `<div class="list-row"><div><strong>${closure.businessDate}</strong><small>${escape(closure.comment || "")}</small></div><span>${money(closure.summary.revenue)}</span></div>`).join("") : `<div class="empty-state">Aucune clôture.</div>`}</div></div>${renderSalesTable(selectedSales)}</section>`;
+    return `<section class="section"><div class="section-head"><div><h3>${state.data.me.role === "agent" ? "Clôturer" : "Clôtures et rapports"}</h3><p>Résumé des ventes par date.</p></div></div><div class="split"><form id="closureForm" class="panel panel-pad form-stack"><div class="actions"><button type="button" class="secondary" data-action="closureToday">Aujourd'hui</button></div><div class="field"><label>Date</label><input name="date" type="date" max="${today}" value="${state.closureDate}" /></div><div class="grid cols-3">${kpi("Ventes", summary.sales, "conclues", "accent")}${kpi("Articles", summary.items, "unités", "blue")}${kpi("Total", money(summary.revenue), "encaissé", "accent")}</div><div class="field"><label>Commentaire</label><textarea name="comment"></textarea></div>${canClose ? `<button class="primary">Clôturer la date</button>` : ""}</form><div class="panel panel-pad"><h3>Historique</h3>${state.data.closures.length ? state.data.closures.map((closure) => `<div class="list-row"><div><strong>${closure.businessDate}</strong><small>${escape(closure.comment || "")}</small></div><span>${money(closure.summary.revenue)}</span></div>`).join("") : `<div class="empty-state">Aucune clôture.</div>`}</div></div>${renderSalesTable(selectedSales)}${renderSelectedSaleDetail()}</section>`;
   }
 
   function renderLogs(logs) {
@@ -643,7 +660,7 @@
 
   function renderSettings() {
     const shop = state.data.shop;
-    return `<section class="section"><div class="section-head"><div><h3>Paramètres shop</h3><p>Identité, horaires et localisation.</p></div></div><div class="split"><form id="settingsForm" class="panel panel-pad form-stack"><div class="grid cols-2"><div class="field"><label>Nom</label><input name="name" value="${escape(shop.name)}" /></div><div class="field"><label>Adresse</label><input name="address" value="${escape(shop.address)}" /></div><div class="field"><label>Logo texte</label><input name="logoText" maxlength="3" value="${escape(shop.logoText || "")}" /></div><div class="field"><label>Logo image</label><input name="logoFile" type="file" accept="image/*" /></div><div class="field"><label>Latitude GPS</label><input name="gpsLat" value="${escape(shop.gpsLat || "")}" /></div><div class="field"><label>Longitude GPS</label><input name="gpsLng" value="${escape(shop.gpsLng || "")}" /></div></div>${renderHoursFields(shop.hours)}<button class="primary">Enregistrer</button></form><div class="panel panel-pad"><h3>Carte</h3>${shop.gpsLat && shop.gpsLng ? `<iframe class="map" src="https://maps.google.com/maps?q=${encodeURIComponent(shop.gpsLat)},${encodeURIComponent(shop.gpsLng)}&z=15&output=embed"></iframe><a class="secondary map-link" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shop.gpsLat + "," + shop.gpsLng)}">Ouvrir Google Maps</a>` : `<div class="empty-state">Coordonnées GPS non renseignées.</div>`}</div></div></section>`;
+    return `<section class="section"><div class="section-head"><div><h3>Paramètres shop</h3><p>Identité, horaires et localisation.</p></div></div><div class="split"><form id="settingsForm" class="panel panel-pad form-stack"><div class="grid cols-2"><div class="field"><label>Nom</label><input name="name" value="${escapeAttr(shop.name)}" /></div><div class="field"><label>Adresse</label><input name="address" value="${escapeAttr(shop.address)}" /></div><div class="field"><label>Logo texte</label><input name="logoText" maxlength="3" value="${escapeAttr(shop.logoText || "")}" /></div><div class="field"><label>Logo image</label><input name="logoFile" type="file" accept="image/*" /></div><div class="field"><label>Latitude GPS</label><input name="gpsLat" value="${escapeAttr(shop.gpsLat || "")}" /></div><div class="field"><label>Longitude GPS</label><input name="gpsLng" value="${escapeAttr(shop.gpsLng || "")}" /></div></div>${renderHoursFields(shop.hours)}<button class="primary">Enregistrer</button></form><div class="panel panel-pad"><h3>Carte</h3>${shop.gpsLat && shop.gpsLng ? `<div class="map-static"><strong>${escape(shop.address || shop.name)}</strong><span>${escape(shop.gpsLat)}, ${escape(shop.gpsLng)}</span><a class="secondary map-link" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shop.gpsLat + "," + shop.gpsLng)}">Ouvrir Google Maps</a></div>` : `<div class="empty-state">Coordonnées GPS non renseignées.</div>`}</div></div></section>`;
   }
 
   function renderFaq() {
@@ -686,6 +703,7 @@
     bindForm("shopForm", submitShop);
     bindForm("settingsForm", submitSettings);
     bindForm("closureForm", submitClosure);
+    bindForm("planningAssignForm", submitPlanningAssign);
     document.querySelectorAll("[data-cart]").forEach((input) => input.addEventListener("input", updateCart));
     bindDragDrop();
   }
@@ -865,7 +883,10 @@
 
   function addCart(id) {
     const variant = variantById(id);
+    if (!variant) return notify("Article introuvable.");
     const existing = state.cart.find((item) => item.variantId === id);
+    const currentQty = existing ? Number(existing.quantity || 0) : 0;
+    if (currentQty >= Number(variant.stock || 0)) return notify("Stock disponible atteint.");
     if (existing) existing.quantity += 1;
     else state.cart.push({ variantId: id, quantity: 1, soldPrice: priceFor(variant).applicablePrice });
     render();
@@ -877,7 +898,16 @@
   }
 
   function updateCart(event) {
-    state.cart[Number(event.target.dataset.cart)][event.target.dataset.field] = Number(event.target.value);
+    const item = state.cart[Number(event.target.dataset.cart)];
+    if (!item) return;
+    const field = event.target.dataset.field;
+    const variant = variantById(item.variantId);
+    let value = Number(event.target.value);
+    if (!Number.isFinite(value)) value = field === "quantity" ? 1 : 0;
+    if (field === "quantity") value = Math.max(1, Math.min(Math.floor(value), Number(variant?.stock || 1)));
+    if (field === "soldPrice") value = Math.max(0, roundMoney(value));
+    item[field] = value;
+    event.target.value = String(value);
     refreshCartMath();
   }
 
@@ -891,25 +921,36 @@
   }
 
   async function submitStock(form) {
-    state.data = await api("/api/stock-entries", { method: "POST", body: { variantId: form.get("variantId"), quantity: Number(form.get("quantity")), comment: form.get("comment") } });
-    notify("Entrée stock envoyée.");
-    render();
+    try {
+      state.data = await api("/api/stock-entries", { method: "POST", body: { variantId: form.get("variantId"), quantity: Number(form.get("quantity")), comment: form.get("comment") } });
+      notify("Entrée stock envoyée.");
+      render();
+    } catch (error) { notify(error.message); }
   }
 
   async function submitType(form) {
-    state.data = await api("/api/types", { method: "POST", body: { subcategoryId: form.get("subcategoryId"), name: form.get("name"), referenceQty: Number(form.get("referenceQty")) } });
-    render();
+    try {
+      state.data = await api("/api/types", { method: "POST", body: { subcategoryId: form.get("subcategoryId"), name: form.get("name"), referenceQty: Number(form.get("referenceQty")) } });
+      notify("Type créé.");
+      render();
+    } catch (error) { notify(error.message); }
   }
 
   async function submitVariant(form) {
-    state.data = await api("/api/variants", { method: "POST", body: { typeId: form.get("typeId"), name: form.get("name"), referencePrice: Number(form.get("referencePrice")) } });
-    render();
+    try {
+      state.data = await api("/api/variants", { method: "POST", body: { typeId: form.get("typeId"), name: form.get("name"), referencePrice: Number(form.get("referencePrice")) } });
+      notify("Variante créée.");
+      render();
+    } catch (error) { notify(error.message); }
   }
 
   async function submitPromo(form) {
-    const [targetScope, targetId] = form.get("target").split(":");
-    state.data = await api("/api/promotions", { method: "POST", body: { label: form.get("label"), targetScope, targetId, discountPercent: Number(form.get("discountPercent")), startDate: form.get("startDate"), endDate: form.get("endDate") } });
-    render();
+    try {
+      const [targetScope, targetId] = form.get("target").split(":");
+      state.data = await api("/api/promotions", { method: "POST", body: { label: form.get("label"), targetScope, targetId, discountPercent: Number(form.get("discountPercent")), startDate: form.get("startDate"), endDate: form.get("endDate") } });
+      notify("Promotion créée.");
+      render();
+    } catch (error) { notify(error.message); }
   }
 
   async function submitUser(form) {
@@ -929,22 +970,34 @@
   }
 
   async function submitShop(form) {
-    const body = Object.fromEntries(form.entries());
-    body.logoData = await fileData(form.get("logoFile"));
-    body.hours = hoursFromForm(form);
-    state.data = await api("/api/shops", { method: "POST", body });
-    notify("Shop créé.");
-    render();
+    try {
+      const body = Object.fromEntries(form.entries());
+      body.logoData = await fileData(form.get("logoFile"));
+      body.hours = hoursFromForm(form);
+      state.data = await api("/api/shops", { method: "POST", body });
+      notify("Shop créé.");
+      render();
+    } catch (error) { notify(error.message); }
   }
 
   async function submitSettings(form) {
-    const body = Object.fromEntries(form.entries());
-    const logoData = await fileData(form.get("logoFile"));
-    if (logoData) body.logoData = logoData;
-    body.hours = hoursFromForm(form);
-    state.data = await api(`/api/shops/${state.data.shop.id}`, { method: "PATCH", body });
-    notify("Paramètres enregistrés.");
-    render();
+    try {
+      const body = Object.fromEntries(form.entries());
+      const logoData = await fileData(form.get("logoFile"));
+      if (logoData) body.logoData = logoData;
+      body.hours = hoursFromForm(form);
+      state.data = await api(`/api/shops/${state.data.shop.id}`, { method: "PATCH", body });
+      notify("Paramètres enregistrés.");
+      render();
+    } catch (error) { notify(error.message); }
+  }
+
+  async function submitPlanningAssign(form) {
+    try {
+      state.data = await api("/api/planning", { method: "POST", body: Object.fromEntries(form.entries()) });
+      notify("Planning mis à jour.");
+      render();
+    } catch (error) { notify(error.message); }
   }
 
   async function submitClosure(form) {
@@ -964,9 +1017,12 @@
       slot.addEventListener("drop", async (event) => {
       event.preventDefault();
       if (state.data.me.role !== "shop_admin") return;
-      const userId = event.dataTransfer.getData("userId");
-      state.data = await api("/api/planning", { method: "POST", body: { userId, date: slot.dataset.date, slotId: slot.dataset.slotId } });
-      render();
+      try {
+        const userId = event.dataTransfer.getData("userId");
+        state.data = await api("/api/planning", { method: "POST", body: { userId, date: slot.dataset.date, slotId: slot.dataset.slotId } });
+        notify("Planning mis à jour.");
+        render();
+      } catch (error) { notify(error.message); }
       });
     });
   }
@@ -1039,14 +1095,7 @@
   }
 
   function weekDays(date) {
-    const base = new Date(`${date}T00:00:00`);
-    const day = base.getDay() || 7;
-    base.setDate(base.getDate() - day + 1);
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      return d.toISOString().slice(0, 10);
-    });
+    return weekDaysLocal(date);
   }
 
   function userChipStyle(user) {
@@ -1065,15 +1114,13 @@
   }
 
   function mappedDay(date) {
-    return ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date(`${date}T00:00:00`).getDay()];
+    return ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][localWeekdayIndex(date)];
   }
 
   function startOfWeek(date) { return weekDays(date)[0]; }
 
   function addDays(date, delta) {
-    const value = new Date(`${date}T00:00:00`);
-    value.setDate(value.getDate() + delta);
-    return value.toISOString().slice(0, 10);
+    return addLocalDays(date, delta);
   }
 
   function periodStats(sales, start, end) {
@@ -1148,7 +1195,7 @@
   }
 
   function shortDay(date) {
-    return new Intl.DateTimeFormat("fr-FR", { weekday: "short" }).format(new Date(`${date}T00:00:00`)).replace(".", "");
+    return new Intl.DateTimeFormat("fr-FR", { weekday: "short" }).format(dateFromLocalDate(date)).replace(".", "");
   }
 
   function badge(value) {
@@ -1193,5 +1240,6 @@
   function signedMoney(value) { return `${Number(value) > 0 ? "+" : ""}${money(value)}`; }
   function formatDate(value) { return new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)); }
   function escape(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
+  function escapeAttr(value) { return escape(value).replaceAll("'", "&#39;"); }
   function notify(message) { state.message = message; render(); setTimeout(() => { state.message = ""; render(); }, 2600); }
 })();

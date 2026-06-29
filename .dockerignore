@@ -13,5 +13,10 @@ yarn-error.log*
 pnpm-debug.log*
 reports/
 coverage/
+docs/
+test/
+test-results/
+playwright-report/
+playwright.config.mjs
 README.md
 AGENTS.md
