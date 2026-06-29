@@ -2,22 +2,29 @@ import express from "express";
 import helmet from "helmet";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const publicDir = join(root, "public");
-const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : join(root, "data");
+const isVercel = Boolean(process.env.VERCEL);
+const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : isVercel ? "/tmp/inventory-data" : join(root, "data");
 const dbPath = join(dataDir, "store.json");
 const port = resolvePort(process.env.PORT || 4173);
 const host = process.env.HOST || "127.0.0.1";
 const isProduction = process.env.NODE_ENV === "production";
-const allowDemoSeed = process.env.ALLOW_DEMO_SEED === "true" || !isProduction;
-const resetCorruptStore = process.env.RESET_CORRUPT_STORE === "true" || !isProduction;
+const allowDemoSeed = process.env.ALLOW_DEMO_SEED === "true" || !isProduction || isVercel;
+const resetCorruptStore = process.env.RESET_CORRUPT_STORE === "true" || !isProduction || isVercel;
 const sessionMaxAgeMs = Number(process.env.SESSION_MAX_AGE_MS || 1000 * 60 * 60 * 8);
+const sessionMode = process.env.SESSION_MODE || (isVercel ? "stateless" : "memory");
+const sessionSecret = process.env.SESSION_SECRET || (isVercel ? process.env.VERCEL_GIT_COMMIT_SHA || "inventory-demo-local-session-secret" : isProduction ? "" : "inventory-dev-session-secret");
 const maxLogs = Number(process.env.MAX_LOGS || 1000);
 const businessTimeZone = process.env.BUSINESS_TIME_ZONE || "Africa/Kinshasa";
 const sessions = new Map();
+
+if (sessionMode === "stateless" && !sessionSecret) {
+  throw new Error("SESSION_SECRET is required when SESSION_MODE=stateless.");
+}
 
 function resolvePort(value) {
   const parsed = Number(value);
@@ -410,8 +417,37 @@ function parseCookies(req) {
   );
 }
 
+function signSessionPayload(payload) {
+  return createHmac("sha256", sessionSecret).update(payload).digest("base64url");
+}
+
+function createSessionToken(userId) {
+  const payload = Buffer.from(JSON.stringify({ userId, createdAtMs: Date.now() })).toString("base64url");
+  return `${payload}.${signSessionPayload(payload)}`;
+}
+
+function readSessionToken(token) {
+  const [payload, signature] = String(token || "").split(".");
+  if (!payload || !signature) return null;
+  const expected = signSessionPayload(payload);
+  const received = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (received.length !== expectedBuffer.length || !timingSafeEqual(received, expectedBuffer)) return null;
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
 function currentUser(req) {
   const sid = parseCookies(req).sid;
+  if (sessionMode === "stateless") {
+    const session = readSessionToken(sid);
+    if (!session) return null;
+    if (Date.now() - Number(session.createdAtMs || 0) > sessionMaxAgeMs) return null;
+    return db.users.find((item) => item.id === session.userId && item.active) || null;
+  }
   const session = sid ? sessions.get(sid) : null;
   if (!session) return null;
   if (Date.now() - Number(session.createdAtMs || 0) > sessionMaxAgeMs) {
@@ -422,6 +458,7 @@ function currentUser(req) {
 }
 
 function pruneSessions() {
+  if (sessionMode === "stateless") return;
   const cutoff = Date.now() - sessionMaxAgeMs;
   for (const [sid, session] of sessions.entries()) {
     if (Number(session.createdAtMs || 0) < cutoff) sessions.delete(sid);
@@ -682,8 +719,8 @@ async function routeApi(req, res, url) {
       saveDb(db);
       return json(res, 401, { error: "invalid_credentials" });
     }
-    const sid = uid("sid");
-    sessions.set(sid, { userId: user.id, createdAt: now(), createdAtMs: Date.now() });
+    const sid = sessionMode === "stateless" ? createSessionToken(user.id) : uid("sid");
+    if (sessionMode !== "stateless") sessions.set(sid, { userId: user.id, createdAt: now(), createdAtMs: Date.now() });
     addLog(user, "LOGIN_SUCCESS", "user", user.id);
     saveDb(db);
     return json(res, 200, { me: publicUser(user) }, { "Set-Cookie": sessionCookie(sid) });
@@ -691,7 +728,7 @@ async function routeApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/logout") {
     const user = currentUser(req);
     const sid = parseCookies(req).sid;
-    if (sid) sessions.delete(sid);
+    if (sid && sessionMode !== "stateless") sessions.delete(sid);
     if (user) addLog(user, "LOGOUT", "user", user.id);
     saveDb(db);
     return json(res, 200, { ok: true }, { "Set-Cookie": clearSessionCookie() });
@@ -1052,6 +1089,19 @@ export function createApp() {
   });
 
   return app;
+}
+
+export async function handleApiRequest(req, res) {
+  try {
+    const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+    const protocol = forwardedProto || (req.socket?.encrypted ? "https" : "http");
+    const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+    const requestHost = forwardedHost || req.headers.host || `${host}:${port}`;
+    await routeApi(req, res, new URL(req.url || "/", `${protocol}://${requestHost}`));
+  } catch (error) {
+    console.error(error);
+    if (!res.headersSent) json(res, 500, { error: "server_error" });
+  }
 }
 
 export function startServer(options = {}) {

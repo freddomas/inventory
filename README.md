@@ -38,6 +38,7 @@ Options supportees par ce depot:
 
 - Hebergement Node.js: `npm ci`, puis `npm start`.
 - Render Blueprint: importer le depot GitHub et utiliser `render.yaml`.
+- Vercel demo: le dossier `api/` expose les routes `/api/*` en fonctions serverless et `public/` sert l'interface.
 - Docker: construire l'image avec `docker build -t inventory-realm .`, puis lancer avec un volume persistant monte sur `/data`.
 
 Variables de production recommandees:
@@ -57,6 +58,8 @@ Le endpoint `/api/health` permet aux plateformes d'hebergement de verifier que l
 Sur Render, le Blueprint utilise un disque persistant monte sur `/var/data`. C'est necessaire pour ne pas perdre `store.json` a chaque redeploiement/redemarrage. Un deploiement sans disque persistant n'est pas correct pour cette application.
 
 `ALLOW_DEMO_SEED=true` est volontaire ici parce que l'application contient des donnees de demonstration. Pour une production reelle, il faut initialiser explicitement les donnees et retirer ce mode demo.
+
+Sur Vercel, le stockage JSON est place dans `/tmp/inventory-data` par le handler serverless. Cela permet de faire fonctionner la demonstration, mais les donnees peuvent etre reinitialisees lors des cold starts, redeploiements ou changements d'instance. Pour un usage durable sur Vercel, migrer la persistance vers une base externe et definir un vrai `SESSION_SECRET` dans les variables d'environnement du projet.
 
 ## Validation
 

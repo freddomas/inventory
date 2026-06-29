@@ -121,7 +121,7 @@ import { addLocalDays, dateFromLocalDate, localWeekdayIndex, todayLocal, weekDay
         <section class="login-panel">
           <div class="brand-row"><span class="mark">IR</span><span>Inventory Realm</span></div>
           <div>
-            <h1 class="login-title">Pilotage d'inventaire multi-shop.</h1>
+            <h1 class="login-title">Pilotez et contrôlez votre activité avec précision.</h1>
             <p class="login-copy">Une plateforme pour gérer catalogues, ventes, stock, équipes et clôtures avec séparation stricte par magasin.</p>
           </div>
           <form id="loginForm" class="form-stack auth-card">

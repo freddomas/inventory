@@ -70,6 +70,11 @@ test.afterAll(async () => {
 
 test.describe.configure({ mode: "serial" });
 
+test("landing page shows the corrected slogan", async ({ page }) => {
+  await page.goto(baseUrl);
+  await expect(page.getByRole("heading", { name: "Pilotez et contrôlez votre activité avec précision." })).toBeVisible();
+});
+
 test("shop admin can create a shift slot and assign it without drag and drop", async ({ page }) => {
   const consoleErrors = [];
   page.on("console", (message) => { if (message.type() === "error") consoleErrors.push(message.text()); });

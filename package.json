@@ -6,7 +6,7 @@
   "description": "Inventory Realm multi-shop inventory and sales app.",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check src/server/index.mjs && node --check public/app.js && node --check public/date-utils.mjs && node --check scripts/smoke.mjs",
+    "check": "node --check server.mjs && node --check src/server/index.mjs && node --check \"api/[...path].mjs\" && node --check public/app.js && node --check public/date-utils.mjs && node --check scripts/smoke.mjs",
     "test": "node --test test/*.test.mjs",
     "test:ui": "playwright test",
     "smoke": "node scripts/smoke.mjs",
