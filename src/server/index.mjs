@@ -98,68 +98,106 @@ let db = loadDb();
 
 function seedDb() {
   const passwordHash = hashPassword("demo2026!");
-  const shops = [
+  const shopProfiles = [
     {
       id: "shop_bellevie",
+      prefix: "bv",
       name: "BelleVie Beauty",
       address: "Avenue de la Justice, Gombe, Kinshasa",
       logoText: "BV",
-      logoData: "",
-      status: "active",
       gpsLat: "-4.3151",
       gpsLng: "15.2897",
-      hours: defaultHours(),
-      createdAt: now(),
+      priceOffset: 1,
+      users: {
+        admin: ["usr_bv_admin", "shop_admin", "Nadia Responsable", "admin.bv"],
+        manager: ["usr_bv_manager", "manager", "Grace Manager", "manager.bv"],
+        agents: [
+          ["usr_bv_agent", "agent", "Amina Agent", "agent.bv"],
+          ["usr_bv_agent2", "agent", "Solange Agent", "agent2.bv"],
+        ],
+      },
     },
     {
       id: "shop_luminance",
+      prefix: "ls",
       name: "Luminance Studio",
       address: "Boulevard du 30 Juin, Kinshasa",
       logoText: "LS",
-      logoData: "",
-      status: "active",
       gpsLat: "-4.3224",
       gpsLng: "15.3070",
-      hours: defaultHours(),
-      createdAt: now(),
+      priceOffset: 2,
+      users: {
+        admin: ["usr_ls_admin", "shop_admin", "Sarah Responsable", "admin.ls"],
+        manager: ["usr_ls_manager", "manager", "Mireille Manager", "manager.ls"],
+        agents: [
+          ["usr_ls_agent", "agent", "Joelle Agent", "agent.ls"],
+          ["usr_ls_agent2", "agent", "Prisca Agent", "agent2.ls"],
+        ],
+      },
+    },
+    {
+      id: "shop_df57c4aaf210",
+      prefix: "tdg",
+      name: "Taille de Guêpe",
+      address: "Kitona, Gombe, Kinshasa",
+      logoText: "TDG",
+      gpsLat: "-4.3148",
+      gpsLng: "15.2919",
+      priceOffset: 3,
+      users: {
+        admin: ["usr_382f56a342dd", "shop_admin", "Mathy MBANGU", "admin.tdg"],
+        manager: ["usr_tdg_manager", "manager", "Chantal Manager", "manager.tdg"],
+        agents: [
+          ["usr_tdg_agent", "agent", "Esther Agent", "agent.tdg"],
+          ["usr_tdg_agent2", "agent", "Paola Agent", "agent2.tdg"],
+        ],
+      },
     },
   ];
+  const shops = shopProfiles.map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    address: profile.address,
+    logoText: profile.logoText,
+    logoData: "",
+    status: "active",
+    gpsLat: profile.gpsLat,
+    gpsLng: profile.gpsLng,
+    hours: defaultHours(),
+    createdAt: now(),
+  }));
   const users = [
     makeUser("usr_super", null, "super_user", "Super User", "super", passwordHash),
-    makeUser("usr_bv_admin", "shop_bellevie", "shop_admin", "Nadia Responsable", "admin.bv", passwordHash),
-    makeUser("usr_bv_manager", "shop_bellevie", "manager", "Grace Manager", "manager.bv", passwordHash),
-    makeUser("usr_bv_agent", "shop_bellevie", "agent", "Amina Agent", "agent.bv", passwordHash),
-    makeUser("usr_ls_admin", "shop_luminance", "shop_admin", "Sarah Responsable", "admin.ls", passwordHash),
-    makeUser("usr_ls_manager", "shop_luminance", "manager", "Mireille Manager", "manager.ls", passwordHash),
-    makeUser("usr_ls_agent", "shop_luminance", "agent", "Joelle Agent", "agent.ls", passwordHash),
+    ...shopProfiles.flatMap((profile) => [profile.users.admin, profile.users.manager, ...profile.users.agents].map(([id, role, name, username]) => makeUser(id, profile.id, role, name, username, passwordHash))),
   ];
-  const a = makeCatalog("shop_bellevie", "bv", 1);
-  const b = makeCatalog("shop_luminance", "ls", 2);
-  const variants = [...a.variants, ...b.variants];
+  const catalogs = shopProfiles.map((profile) => ({ profile, ...makeCatalog(profile.id, profile.prefix, profile.priceOffset) }));
+  const variants = catalogs.flatMap((catalog) => catalog.variants);
   const stockEntries = [];
   const movements = [];
-  variants.forEach((variant) => {
+  const profileByShop = Object.fromEntries(shopProfiles.map((profile) => [profile.id, profile]));
+  variants.forEach((variant, index) => {
+    const profile = profileByShop[variant.shopId];
     stockEntries.push({
-      id: uid("entry"),
+      id: `entry_initial_${variant.id}`,
       shopId: variant.shopId,
       variantId: variant.id,
       quantity: variant.seedQty,
       status: "validated",
-      declaredBy: variant.shopId === "shop_bellevie" ? "usr_bv_manager" : "usr_ls_manager",
-      decidedBy: variant.shopId === "shop_bellevie" ? "usr_bv_admin" : "usr_ls_admin",
-      declaredAt: now(),
-      decidedAt: now(),
+      declaredBy: profile.users.manager[0],
+      decidedBy: profile.users.admin[0],
+      declaredAt: `${addDays(-15)}T08:${String(index % 60).padStart(2, "0")}:00.000Z`,
+      decidedAt: `${addDays(-15)}T09:${String(index % 60).padStart(2, "0")}:00.000Z`,
       managerSeenAt: null,
     });
     variant.stock = variant.seedQty;
     movements.push({
-      id: uid("move"),
+      id: `move_initial_${variant.id}`,
       shopId: variant.shopId,
       variantId: variant.id,
       typeId: variant.typeId,
       quantity: variant.seedQty,
       reason: "stock_validated",
-      createdAt: now(),
+      createdAt: `${addDays(-15)}T09:${String(index % 60).padStart(2, "0")}:00.000Z`,
     });
     delete variant.seedQty;
   });
@@ -175,20 +213,14 @@ function seedDb() {
     decidedAt: null,
     managerSeenAt: null,
   });
-  const sales = [
-    seedSale("shop_bellevie", "usr_bv_agent", [
-      line("bv_var_lotion_karite", 2, 24, 23),
-      line("bv_var_foundation_m", 1, 33, 36),
-    ]),
-    seedSale("shop_luminance", "usr_ls_agent", [line("ls_var_robe_midi", 1, 47, 46)]),
-  ];
+  const sales = catalogs.flatMap((catalog) => makeTrainingSales(catalog.profile, catalog.variants));
   sales.forEach((sale) => {
     sale.lines.forEach((saleLine) => {
       const variant = variants.find((item) => item.id === saleLine.variantId);
       if (!variant) return;
       variant.stock -= saleLine.quantity;
       movements.push({
-        id: uid("move"),
+        id: `move_${sale.id}_${sale.lines.indexOf(saleLine)}`,
         shopId: sale.shopId,
         variantId: variant.id,
         typeId: variant.typeId,
@@ -199,30 +231,28 @@ function seedDb() {
     });
   });
   return {
-    version: 2,
+    version: 3,
     shops,
     users,
-    categories: [...a.categories, ...b.categories],
-    subcategories: [...a.subcategories, ...b.subcategories],
-    types: [...a.types, ...b.types],
+    categories: catalogs.flatMap((catalog) => catalog.categories),
+    subcategories: catalogs.flatMap((catalog) => catalog.subcategories),
+    types: catalogs.flatMap((catalog) => catalog.types),
     variants,
     stockEntries,
     movements,
-    promotions: [
-      {
-        id: "promo_bv_foundation",
-        shopId: "shop_bellevie",
-        label: "Fond de teint vedette",
-        targetScope: "type",
-        targetId: "bv_type_foundation",
-        discountPercent: 18,
-        startDate: today(),
-        endDate: addDays(8),
-        status: "active",
-        createdBy: "usr_bv_admin",
-        createdAt: now(),
-      },
-    ],
+    promotions: shopProfiles.map((profile) => ({
+      id: `promo_${profile.prefix}_foundation`,
+      shopId: profile.id,
+      label: "Fond de teint vedette",
+      targetScope: "type",
+      targetId: `${profile.prefix}_type_foundation`,
+      discountPercent: 18,
+      startDate: addDays(-4),
+      endDate: addDays(8),
+      status: "active",
+      createdBy: profile.users.admin[0],
+      createdAt: `${addDays(-4)}T08:00:00.000Z`,
+    })),
     sales,
     closures: [],
     alerts: [],
@@ -231,7 +261,9 @@ function seedDb() {
     settings: { platformName: "Inventory Realm", supportEmail: "support@inventory.local" },
     logs: [
       logEvent(null, "system", "system", "SYSTEM_BOOTSTRAPPED", "system", "seed", "success", {
-        shops: 2,
+        shops: shops.length,
+        types: catalogs.reduce((count, catalog) => count + catalog.types.length, 0),
+        sales: sales.length,
       }),
     ],
   };
@@ -263,6 +295,35 @@ function migrateDb(nextDb) {
       if (slot) shift.slotId = slot.id;
     }
   }
+  if (Number(nextDb.version || 0) < 3) {
+    return mergeTrainingSeed(nextDb, seedDb());
+  }
+  return nextDb;
+}
+
+function mergeTrainingSeed(currentDb, seededDb) {
+  const nextDb = { ...currentDb };
+  for (const collection of ["shops", "users", "categories", "subcategories", "types", "variants", "stockEntries", "movements", "promotions", "sales"]) {
+    const byId = new Map((currentDb[collection] || []).map((item) => [item.id, item]));
+    for (const item of seededDb[collection] || []) {
+      byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
+    }
+    nextDb[collection] = [...byId.values()];
+  }
+  nextDb.closures ||= [];
+  nextDb.alerts ||= [];
+  nextDb.planning ||= [];
+  nextDb.shiftSlots ||= [];
+  nextDb.settings = { ...seededDb.settings, ...(currentDb.settings || {}) };
+  nextDb.logs = [
+    logEvent(null, "system", "system", "TRAINING_DATA_REFRESHED", "system", "seed", "success", {
+      shops: seededDb.shops.length,
+      types: seededDb.types.length,
+      sales: seededDb.sales.length,
+    }),
+    ...(currentDb.logs || []),
+  ].slice(0, maxLogs);
+  nextDb.version = seededDb.version;
   return nextDb;
 }
 
@@ -293,25 +354,64 @@ function addDays(days) {
   ].join("-");
 }
 
-function seedSale(shopId, agentId, lines) {
+function seedSale(shopId, agentId, lines, options = {}) {
   return {
-    id: uid("sale"),
+    id: options.id || uid("sale"),
     shopId,
     agentId,
-    clientName: "Client comptoir",
-    contact: "",
+    clientName: options.clientName || "Client comptoir",
+    contact: options.contact || "",
     status: "completed",
     notificationStatus: "not_configured",
-    createdAt: addDays(-1) + "T09:40:00.000Z",
-    decidedBy: null,
-    decidedAt: null,
-    comment: "",
+    createdAt: options.createdAt || `${addDays(-1)}T09:40:00.000Z`,
+    decidedBy: options.decidedBy || null,
+    decidedAt: options.decidedAt || null,
+    comment: options.comment || "",
     lines,
   };
 }
 
 function line(variantId, quantity, applicablePrice, soldPrice) {
   return { variantId, quantity, referencePrice: applicablePrice, promotionId: null, applicablePrice, soldPrice };
+}
+
+function roundMoney(value) {
+  return Number(Number(value).toFixed(2));
+}
+
+function makeTrainingSales(profile, variants) {
+  const clients = ["Client comptoir", "Client fidélité", "Client passage", "Client réservation", "Client conseil", "Client salon", "Client livraison"];
+  const sellers = [profile.users.agents[0][0], profile.users.agents[1][0], profile.users.admin[0]];
+  const sales = [];
+  for (let dayOffset = -13; dayOffset <= 0; dayOffset += 1) {
+    const date = addDays(dayOffset);
+    const dayIndex = dayOffset + 13;
+    for (let saleIndex = 0; saleIndex < 10; saleIndex += 1) {
+      const selected = [
+        variants[(dayIndex * 11 + saleIndex * 3) % variants.length],
+        saleIndex % 2 === 0 ? variants[(dayIndex * 7 + saleIndex * 5 + 13) % variants.length] : null,
+        saleIndex % 5 === 0 ? variants[(dayIndex * 13 + saleIndex * 2 + 29) % variants.length] : null,
+      ].filter(Boolean);
+      const uniqueSelected = [...new Map(selected.map((variant) => [variant.id, variant])).values()];
+      const saleLines = uniqueSelected.map((variant, lineIndex) => {
+        const quantity = 1 + ((dayIndex + saleIndex + lineIndex) % 3);
+        const multiplier = saleIndex % 9 === 0 ? 0.92 : saleIndex % 7 === 0 ? 1.05 : saleIndex % 5 === 0 ? 0.97 : 1;
+        return line(variant.id, quantity, variant.referencePrice, roundMoney(variant.referencePrice * multiplier));
+      });
+      const underPrice = saleLines.some((saleLine) => Number(saleLine.soldPrice) < Number(saleLine.applicablePrice));
+      const hour = 8 + ((saleIndex + dayIndex) % 10);
+      const minute = (saleIndex * 7 + dayIndex * 3) % 60;
+      sales.push(seedSale(profile.id, sellers[(dayIndex + saleIndex) % sellers.length], saleLines, {
+        id: `sale_${profile.prefix}_${date.replaceAll("-", "")}_${String(saleIndex + 1).padStart(2, "0")}`,
+        clientName: clients[(dayIndex + saleIndex) % clients.length],
+        createdAt: `${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`,
+        decidedBy: underPrice ? profile.users.admin[0] : null,
+        decidedAt: underPrice ? `${date}T${String(Math.min(hour + 1, 19)).padStart(2, "0")}:${String((minute + 9) % 60).padStart(2, "0")}:00.000Z` : null,
+        comment: underPrice ? "Prix ajusté validé" : "",
+      }));
+    }
+  }
+  return sales;
 }
 
 function makeCatalog(shopId, prefix, offset) {
@@ -330,38 +430,76 @@ function makeCatalog(shopId, prefix, offset) {
   const subRows = [
     ["cream", "Crèmes visage", "face"],
     ["serum", "Sérums & traitements", "face"],
+    ["cleanser", "Nettoyants visage", "face"],
+    ["protection", "Protection & masques", "face"],
     ["lotion", "Lotions corps", "body"],
     ["scrub", "Gommages & exfoliants", "body"],
+    ["body_care", "Soins corps ciblés", "body"],
     ["shampoo", "Shampoings", "hair"],
     ["hairmask", "Masques & soins cheveux", "hair"],
+    ["styling", "Coiffage & extensions", "hair"],
     ["perfume", "Parfums femme", "fragrance"],
     ["foundation", "Fonds de teint & poudres", "makeup"],
+    ["color_makeup", "Maquillage couleur", "makeup"],
     ["dress", "Robes & ensembles", "clothing"],
+    ["ready_to_wear", "Prêt-à-porter", "clothing"],
+    ["shoes", "Chaussures", "clothing"],
+    ["nail_care", "Soins ongles", "nails"],
+    ["wellness_tools", "Consommables bien-être", "wellness"],
+    ["beauty_tools", "Outils beauté", "beauty_access"],
     ["watch", "Sacs, bijoux & montres", "fashion_access"],
   ];
-  const typeRows = [
-    ["cream", "Crème hydratante", "cream", 30],
-    ["serum", "Sérum visage", "serum", 18],
-    ["lotion", "Lotion corporelle", "lotion", 100],
-    ["scrub", "Gommage", "scrub", 20],
-    ["shampoo", "Shampoing", "shampoo", 25],
-    ["hairmask", "Masque cheveux", "hairmask", 16],
-    ["perfume", "Parfum", "perfume", 5],
-    ["foundation", "Fond de teint", "foundation", 22],
-    ["dress", "Robe", "dress", 12],
-    ["watch", "Montre", "watch", 5],
-  ];
-  const variantRows = [
-    ["cream_day", "Crème jour peau mixte", "cream", 18, 28],
-    ["serum_vitc", "Sérum vitamine C 30ml", "serum", 10, 34],
-    ["lotion_karite", "Lotion karité 500ml", "lotion", 64, 24],
-    ["scrub_cafe", "Gommage café 250g", "scrub", 15, 18],
-    ["shampoo_hydra", "Shampoing hydratant 400ml", "shampoo", 19, 16],
-    ["hairmask_keratin", "Masque kératine 300ml", "hairmask", 12, 21],
-    ["parfum_50", "Parfum floral 50ml", "perfume", 5, 42],
-    ["foundation_m", "Fond de teint teinte moyenne", "foundation", 11, 32],
-    ["robe_midi", "Robe midi satin M", "dress", 8, 45],
-    ["watch_gold", "Montre dorée modèle A", "watch", 5, 38],
+  const productRows = [
+    ["cream", "Crème hydratante", "cream", "cream_day", "Crème jour peau mixte", 30, 28],
+    ["serum", "Sérum visage", "serum", "serum_vitc", "Sérum vitamine C 30ml", 18, 34],
+    ["lotion", "Lotion corporelle", "lotion", "lotion_karite", "Lotion karité 500ml", 100, 24],
+    ["scrub", "Gommage", "scrub", "scrub_cafe", "Gommage café 250g", 20, 18],
+    ["shampoo", "Shampoing", "shampoo", "shampoo_hydra", "Shampoing hydratant 400ml", 25, 16],
+    ["hairmask", "Masque cheveux", "hairmask", "hairmask_keratin", "Masque kératine 300ml", 16, 21],
+    ["perfume", "Parfum", "perfume", "parfum_50", "Parfum floral 50ml", 5, 42],
+    ["foundation", "Fond de teint", "foundation", "foundation_m", "Fond de teint teinte moyenne", 22, 32],
+    ["dress", "Robe", "dress", "robe_midi", "Robe midi satin M", 12, 45],
+    ["watch", "Montre", "watch", "watch_gold", "Montre dorée modèle A", 5, 38],
+    ["cleanser", "Gel nettoyant visage", "cleanser", "cleanser_soft", "Gel nettoyant doux 200ml", 34, 19],
+    ["toner", "Lotion tonique", "cleanser", "toner_rose", "Lotion tonique rose 180ml", 26, 17],
+    ["sunscreen", "Protection solaire", "protection", "sunscreen_spf50", "Crème solaire SPF50", 24, 29],
+    ["face_mask", "Masque visage", "protection", "face_mask_clay", "Masque argile purifiante", 18, 22],
+    ["face_oil", "Huile visage", "serum", "face_oil_argan", "Huile visage argan 30ml", 14, 27],
+    ["conditioner", "Après-shampoing", "shampoo", "conditioner_shea", "Après-shampoing karité", 24, 18],
+    ["leave_in", "Soin sans rinçage", "hairmask", "leave_in_curl", "Soin boucles sans rinçage", 18, 24],
+    ["hair_oil", "Huile cheveux", "hairmask", "hair_oil_coco", "Huile coco cheveux", 20, 15],
+    ["styling_gel", "Gel coiffant", "styling", "styling_gel_edge", "Gel fixation contour", 28, 12],
+    ["wig", "Perruque", "styling", "wig_lace", "Perruque lace naturelle", 8, 72],
+    ["body_oil", "Huile corporelle", "body_care", "body_oil_glow", "Huile scintillante corps", 18, 26],
+    ["hand_cream", "Crème mains", "body_care", "hand_cream_almond", "Crème mains amande", 32, 10],
+    ["soap", "Savon soin", "body_care", "soap_black", "Savon noir végétal", 54, 8],
+    ["deodorant", "Déodorant", "wellness_tools", "deodorant_rollon", "Déodorant roll-on doux", 40, 9],
+    ["body_mist", "Brume parfumée", "perfume", "body_mist_vanilla", "Brume vanille 250ml", 24, 18],
+    ["concealer", "Correcteur teint", "foundation", "concealer_warm", "Correcteur teint chaud", 20, 21],
+    ["lipstick", "Rouge à lèvres", "color_makeup", "lipstick_matte", "Rouge à lèvres mat", 36, 14],
+    ["mascara", "Mascara", "color_makeup", "mascara_volume", "Mascara volume noir", 28, 16],
+    ["eyeliner", "Eyeliner", "color_makeup", "eyeliner_felt", "Eyeliner feutre noir", 30, 11],
+    ["blush", "Blush", "color_makeup", "blush_peach", "Blush pêche compact", 22, 18],
+    ["powder", "Poudre compacte", "foundation", "powder_matte", "Poudre matifiante", 24, 20],
+    ["eye_palette", "Palette yeux", "color_makeup", "eye_palette_nude", "Palette yeux nude", 14, 31],
+    ["nail_polish", "Vernis classique", "nail_care", "nail_polish_red", "Vernis rouge profond", 46, 7],
+    ["gel_polish", "Vernis gel", "nail_care", "gel_polish_clear", "Vernis gel transparent", 30, 12],
+    ["cuticle_oil", "Huile cuticules", "nail_care", "cuticle_oil_lavender", "Huile cuticules lavande", 26, 9],
+    ["nail_kit", "Kit manucure", "nail_care", "nail_kit_travel", "Kit manucure voyage", 12, 18],
+    ["cotton_pads", "Disques coton", "wellness_tools", "cotton_pads_soft", "Disques coton doux", 80, 5],
+    ["wipes", "Lingettes", "wellness_tools", "wipes_micellar", "Lingettes micellaires", 52, 6],
+    ["brush_set", "Set pinceaux", "beauty_tools", "brush_set_pro", "Set pinceaux visage", 16, 29],
+    ["beauty_sponge", "Éponge maquillage", "beauty_tools", "beauty_sponge_soft", "Éponge maquillage douce", 42, 8],
+    ["mirror", "Miroir compact", "beauty_tools", "mirror_led", "Miroir compact LED", 18, 20],
+    ["organizer", "Organisateur beauté", "beauty_tools", "organizer_acrylic", "Organisateur acrylique", 12, 25],
+    ["blouse", "Blouse", "ready_to_wear", "blouse_satin", "Blouse satin ivoire", 14, 34],
+    ["skirt", "Jupe", "ready_to_wear", "skirt_plisse", "Jupe plissée noire", 13, 36],
+    ["jeans", "Jean", "ready_to_wear", "jeans_highwaist", "Jean taille haute", 16, 39],
+    ["blazer", "Blazer", "ready_to_wear", "blazer_crepe", "Blazer crêpe ajusté", 10, 58],
+    ["shoes", "Chaussure", "shoes", "shoes_sandal", "Sandales talon carré", 12, 44],
+    ["bag", "Sac", "watch", "bag_crossbody", "Sac bandoulière cuir", 10, 49],
+    ["belt", "Ceinture", "watch", "belt_gold", "Ceinture boucle dorée", 18, 17],
+    ["earrings", "Boucles d'oreilles", "watch", "earrings_pearl", "Boucles perles fines", 24, 13],
   ];
   const categories = categoryRows.map(([key, name]) => ({ id: `${prefix}_cat_${key}`, shopId, name, active: true }));
   const subcategories = subRows.map(([key, name, cat]) => ({
@@ -371,7 +509,7 @@ function makeCatalog(shopId, prefix, offset) {
     name,
     active: true,
   }));
-  const types = typeRows.map(([key, name, sub, referenceQty]) => ({
+  const types = productRows.map(([key, name, sub, , , referenceQty]) => ({
     id: `${prefix}_type_${key}`,
     shopId,
     subcategoryId: `${prefix}_sub_${sub}`,
@@ -379,15 +517,15 @@ function makeCatalog(shopId, prefix, offset) {
     referenceQty,
     active: true,
   }));
-  const variants = variantRows.map(([key, name, type, seedQty, price], index) => ({
-    id: `${prefix}_var_${key}`,
+  const variants = productRows.map(([typeKey, , , variantKey, variantName, referenceQty, price], index) => ({
+    id: `${prefix}_var_${variantKey}`,
     shopId,
-    typeId: `${prefix}_type_${type}`,
+    typeId: `${prefix}_type_${typeKey}`,
     sku: `${prefix.toUpperCase()}-${String(index + 1).padStart(3, "0")}`,
-    name,
+    name: variantName,
     referencePrice: price + offset,
     stock: 0,
-    seedQty,
+    seedQty: referenceQty * 2 + 20 + ((index + offset) % 9) * 3,
     active: true,
   }));
   return { categories, subcategories, types, variants };

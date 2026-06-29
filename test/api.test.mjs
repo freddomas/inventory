@@ -111,6 +111,43 @@ test("limits bootstrap payloads by role need-to-know", async () => {
   assert.ok(Array.isArray(managerBootstrap.payload.planning));
 });
 
+test("seeds training data for all registered shops", async () => {
+  for (const shop of [
+    { username: "admin.bv", shopId: "shop_bellevie" },
+    { username: "admin.ls", shopId: "shop_luminance" },
+    { username: "admin.tdg", shopId: "shop_df57c4aaf210" },
+  ]) {
+    const login = await request("/api/login", { method: "POST", body: { username: shop.username, password: "demo2026!" } });
+    assert.equal(login.response.status, 200);
+    const bootstrap = await request("/api/bootstrap", { cookie: login.cookie });
+    assert.equal(bootstrap.response.status, 200);
+    assert.equal(bootstrap.payload.shop.id, shop.shopId);
+    assert.ok(bootstrap.payload.users.length >= 3);
+    assert.ok(bootstrap.payload.types.length >= 50);
+    assert.ok(bootstrap.payload.variants.length >= 50);
+
+    const completedSales = bootstrap.payload.sales.filter((sale) => sale.status === "completed");
+    assert.ok(completedSales.length >= 140);
+    const salesByDate = completedSales.reduce((acc, sale) => {
+      const date = sale.createdAt.slice(0, 10);
+      acc.set(date, (acc.get(date) || 0) + 1);
+      return acc;
+    }, new Map());
+    assert.equal(salesByDate.size, 14);
+    assert.ok([...salesByDate.values()].every((count) => count >= 10));
+
+    const businessNames = [
+      bootstrap.payload.shop.name,
+      ...bootstrap.payload.users.map((user) => user.name),
+      ...bootstrap.payload.categories.map((item) => item.name),
+      ...bootstrap.payload.subcategories.map((item) => item.name),
+      ...bootstrap.payload.types.map((item) => item.name),
+      ...bootstrap.payload.variants.map((item) => item.name),
+    ].join(" ").toLowerCase();
+    assert.equal(businessNames.includes("demo"), false);
+  }
+});
+
 test("enforces role permissions and completes normal sales", async () => {
   const managerLogin = await request("/api/login", { method: "POST", body: { username: "manager.bv", password: "demo2026!" } });
   assert.equal(managerLogin.response.status, 200);
