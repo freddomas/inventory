@@ -5,7 +5,7 @@ import { pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const dataDir = join(root, "data");
+const dataDir = process.env.DATA_DIR ? resolve(process.env.DATA_DIR) : join(root, "data");
 const dbPath = join(dataDir, "store.json");
 const port = Number(process.env.PORT || 4173);
 const host = process.env.HOST || "127.0.0.1";
@@ -545,6 +545,9 @@ function saleTotals(sale) {
 }
 
 async function routeApi(req, res, url) {
+  if (req.method === "GET" && url.pathname === "/api/health") {
+    return json(res, 200, { status: "ok", uptime: Math.round(process.uptime()), timestamp: now() });
+  }
   if (req.method === "POST" && url.pathname === "/api/login") {
     const input = await body(req);
     if (String(input.password || "").length < 8) return json(res, 400, { error: "password_min_8" });

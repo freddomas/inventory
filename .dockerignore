@@ -1,0 +1,17 @@
+.agents/
+.codex/
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+data/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+reports/
+coverage/
+README.md
+AGENTS.md
